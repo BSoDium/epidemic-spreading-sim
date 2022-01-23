@@ -7,6 +7,7 @@ using StatsBase
 using Plots
 using JLD2
 using Compose
+using Printf
 
 include("lib.jl")
 
@@ -66,8 +67,9 @@ function SIS(net,state,beta,alpha,t)
   return outputstate
 end
 
+
 """
-Take a contact network, different diseases (defined by 
+Take a contact network, different diseases (defined by
 different parameters alpha and beta), a number of initial
 infected people and process nbsimu simulations of SIS over
 t time steps. You will provide the prediction of the
@@ -93,27 +95,37 @@ spreading rate of each disease.
 
 """
 function Simulation_SIS(net,nbinf,betas,alphas,t,nbsimu)
-    
-  n = length(alphas)
-  avg_infected_percentage = zeros(t, n)
-  effective_spreading_rate = zeros(n)
+  
+  avg_infected_percentage = zeros(t, nbsimu)
+  effective_spreading_rate = zeros(nbsimu)
 
-  for i in 1:n
+  for d in 1:nbsimu
+    # @printf "Simulation %i out of %i done.\n" d nbsimu
+
+    alpha = alphas[d]
+    beta = betas[d]
+    # Initialize the state
+    state = init_State(nv(net), nbinf)
     for step in 1:t
-      for j in 1:nbsimu
-        # Initialize the state
-        state = init_State(nv(net), nbinf)
+      # Simulate the disease
+      state = SIS(net, state, beta, alpha, step)
 
-        # Simulate the disease
-        state = SIS(net, state, betas[i], alphas[i], step)
-
-        # Compute the percentage of infected
-        avg_infected_percentage[step, i] += sum(state) / nv(net)
-      end
-      avg_infected_percentage[step, i] /= nbsimu
+      # Compute the percentage of infected
+      avg_infected_percentage[step, d] = sum(state) / nv(net)
     end
-    effective_spreading_rate[i] = betas[i]/alphas[i]
+    effective_spreading_rate[d] = beta / alpha
   end
 
-  return avg_infected_percentage , effective_spreading_rate   
+  return avg_infected_percentage , effective_spreading_rate
+end
+
+if abspath(PROGRAM_FILE) == @__FILE__
+  karat7 = smallgraph(:karate)
+
+  betas=[0.05,0.1,0.01,0.4,0.04,0.05,0.005]
+  alphas=[0.05,0.1,0.01,0.1,0.01,0.1,0.01]
+
+  predictions, taus = Simulation_SIS(karat7,2,betas,alphas,10,7)
+
+  Plots.plot(predictions, label=taus',xlabel="Time",ylabel="Avg % of infected")
 end
