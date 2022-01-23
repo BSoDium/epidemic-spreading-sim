@@ -1,5 +1,3 @@
-import Base.Threads
-import Base.lock
 using Pkg
 using LightGraphs
 using GraphPlot
