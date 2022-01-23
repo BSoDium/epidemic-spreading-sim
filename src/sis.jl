@@ -1,3 +1,5 @@
+import Base.Threads
+import Base.lock
 using Pkg
 using LightGraphs
 using GraphPlot
@@ -95,31 +97,42 @@ spreading rate of each disease.
 
 """
 function Simulation_SIS(net,nbinf,betas,alphas,t,nbsimu)
-  
+  # initialize lock
+  lk = Threads.SpinLock()
+
+  nbdis = size(alphas)[1]
   avg_infected_percentage = zeros(t, nbsimu)
-  effective_spreading_rate = zeros(nbsimu)
+  effective_spreading_rate = zeros(nbdis)
 
-  for d in 1:nbsimu
-    # @printf "Simulation %i out of %i done.\n" d nbsimu
+  Threads.@threads for i in 1:nbdis
+    alpha = alphas[i]
+    beta = betas[i]
+    effective_spreading_rate[i] = beta / alpha
+    @printf "Disease %i out of %i running...\n" i nbdis
+    for j in 1:nbsimu
+      # Initialize the state
+      state = init_State(nv(net), nbinf)
+      for step in 1:t
+        # Simulate the disease
+        state = SIS(net, state, beta, alpha, step)
 
-    alpha = alphas[d]
-    beta = betas[d]
-    # Initialize the state
-    state = init_State(nv(net), nbinf)
-    for step in 1:t
-      # Simulate the disease
-      state = SIS(net, state, beta, alpha, step)
-
-      # Compute the percentage of infected
-      avg_infected_percentage[step, d] = sum(state) / nv(net)
+        lock(lk)
+        try
+          # Compute the percentage of infected
+          avg_infected_percentage[step, i] += sum(state) / nv(net)
+        finally
+          unlock(lk)
+        end
+      end
     end
-    effective_spreading_rate[d] = beta / alpha
+    @printf "Disease %i out of %i done.\n" i nbdis
   end
 
-  return avg_infected_percentage , effective_spreading_rate
+  return avg_infected_percentage / nbsimu , effective_spreading_rate
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
+  # just a small test
   karat7 = smallgraph(:karate)
 
   betas=[0.05,0.1,0.01,0.4,0.04,0.05,0.005]

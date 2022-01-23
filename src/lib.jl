@@ -34,11 +34,15 @@ Draw the contact network and the state of its vertices.
   - cleanColor `String` : *color of the clean vertices (optional)*
   
 """
-function draw_Net_Graph(net, state, filename, infectedColor = colorant"orange", cleanColor = colorant"lightseagreen")
-  nodecolor = [cleanColor for i in 0:nv(net)]
+function draw_Net_Graph(net, state, filename, infectedColor = colorant"orange", susceptibleColor = colorant"lightseagreen", curedColor = colorant"lightgreen", alertColor = colorant"purple")
+  nodecolor = [susceptibleColor for i in 0:nv(net)]
   for i in 1:nv(net)
     if state[i] == 1
       nodecolor[i] = infectedColor
+    elseif state[i] == 2
+      nodecolor[i] = curedColor
+    elseif state[i] == 3
+      nodecolor[i] = alertColor
     end
   end
   draw(PNG(string("out/", filename), 100cm, 100cm), gplot(net, nodefillc=nodecolor))
