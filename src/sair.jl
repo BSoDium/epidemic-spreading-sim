@@ -111,48 +111,47 @@ spreading rate of each disease.
 """
 function Simulation_SAIR(net,nbinf,betas0,betas1,alphas,kappas,t,nbsimu)
   
-# initialize lock
-lk = Threads.SpinLock()
+    # initialize lock
+    lk = Threads.SpinLock()
 
-nbdis = size(alphas)[1]
-avg_infected_percentage = zeros(t, nbdis, 3)
-effective_spreading_rate = zeros(nbdis)
+    nbdis = size(alphas)[1]
+    avg_infected_percentage = zeros(t, nbdis, 3)
+    effective_spreading_rate = zeros(nbdis)
 
-Threads.@threads for i in 1:nbdis
-alpha = alphas[i]
-beta0 = betas0[i]
-beta1 = betas1[i]
-kappa = kappas[i]
+    Threads.@threads for i in 1:nbdis
+        alpha = alphas[i]
+        beta0 = betas0[i]
+        beta1 = betas1[i]
+        kappa = kappas[i]
 
-effective_spreading_rate[i] = beta0 / alpha
-for j in 1:nbsimu
-    # Initialize the state
-    state = init_State(nv(net), nbinf)
-    for step in 1:t
-    # Simulate the disease
-    state = SAIR(net, state, beta0, beta1, alpha, kappa, step)
+        effective_spreading_rate[i] = beta0 / alpha
+        for j in 1:nbsimu
+            # Initialize the state
+            state = init_State(nv(net), nbinf)
+            for step in 1:t
+                # Simulate the disease
+                state = SAIR(net, state, beta0, beta1, alpha, kappa, step)
 
-    lock(lk)
-    try
-        # Compute the percentage of infected
-        for s in state
-        if s == 1
-            avg_infected_percentage[step, i, 1] += 1
-        elseif s == 2
-            avg_infected_percentage[step, i, 2] += 1
-        elseif s == 3
-            avg_infected_percentage[step, i, 3] += 1
+                lock(lk)
+                try
+                    # Compute the percentage of infected
+                    for s in state
+                        if s == 1
+                            avg_infected_percentage[step, i, 1] += 1
+                        elseif s == 2
+                            avg_infected_percentage[step, i, 2] += 1
+                        elseif s == 3
+                            avg_infected_percentage[step, i, 3] += 1
+                        end
+                    end
+                    avg_infected_percentage[step, i, 1] /= nv(net)
+                    avg_infected_percentage[step, i, 2] /= nv(net)
+                    avg_infected_percentage[step, i, 3] /= nv(net)
+                finally
+                    unlock(lk)
+                end
+            end
         end
-        end
-        avg_infected_percentage[step, i, 1] /= nv(net)
-        avg_infected_percentage[step, i, 2] /= nv(net)
-        avg_infected_percentage[step, i, 3] /= nv(net)
-    finally
-        unlock(lk)
     end
-    end
-end
-end
-return avg_infected_percentage / nbsimu , effective_spreading_rate
-end
+    return avg_infected_percentage / nbsimu , effective_spreading_rate
 end

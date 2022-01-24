@@ -98,7 +98,7 @@ function Simulation_SIS(net,nbinf,betas,alphas,t,nbsimu)
   # initialize lock
   lk = Threads.SpinLock()
 
-  nbdis = size(alphas)[1]
+  nbdis = size(alphas)[1] 
   avg_infected_percentage = zeros(t, nbdis)
   effective_spreading_rate = zeros(nbdis)
 

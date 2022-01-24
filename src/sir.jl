@@ -111,7 +111,7 @@ function Simulation_SIR(net,nbinf,betas,alphas,t,nbsimu)
               avg_infected_percentage[step, i, 1] += 1
             elseif s == 2
               avg_infected_percentage[step, i, 2] += 1
-            elseif s == 3
+            elseif s == 0
               avg_infected_percentage[step, i, 3] += 1
             end
           end
