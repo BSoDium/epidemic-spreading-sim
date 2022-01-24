@@ -1,33 +1,18 @@
-using Pkg
-using LightGraphs
-using GraphPlot
-using Colors
-using CairoMakie
-using StatsBase
-using Plots
-using JLD2
-using Compose
-using Printf
-
-include("lib.jl")
-
 """
 Take a contact network at a certain state and apply t time steps
-of a SIS model.
-
-**PARAMS** :
-  - net `LightGraph` : *graph representing the contact network*
-  - state `Array{Int32,1}` : *disease status of each vertex*
-  - beta `Float64` : *infection rate*
-  - alpha `Float64` : *curing rate*
-  - t `Int32` : *number of time step*
-
-**RETURNS** :
-  - state `Array{Int32,1}` : *The new state of the contact network after t time steps.*
+  of an SIR model.
   
-"""
-function SIS(net,state,beta,alpha,t) 
+  PARAMS
+    - net `LightGraph`: *graph representing the contact network*
+    - state `Array{Int32,1}`: *disease status of each vertex*
+    - beta `Float64`: *infection rate*
+    - alpha `Float64`: *curing rate*
+    - t `Int32`: *number of time step*
   
+  RETURNS
+      - `Array{Int32,1}`: *The new state of the contact network after t time steps.*
+  """
+function SIR(net,state,beta,alpha,t)
   # This array will let us know if we have already checked if the node should
   # cured at this step or not.
   hasCellBeenChecked = [0 for i in 0:nv(net)]
@@ -52,12 +37,12 @@ function SIS(net,state,beta,alpha,t)
           # check both cells can cure themselves, if they have not been checked yet
           if state[from] == 1 && hasCellBeenChecked[from] == 0
               if rand() < alpha
-                  outputstate[from] = 0
+                  outputstate[from] = 2
               end
               hasCellBeenChecked[from] = 1
           elseif state[to] == 1 && hasCellBeenChecked[to] == 0
               if rand() < alpha
-                  outputstate[to] = 0
+                  outputstate[to] = 2
               end
               hasCellBeenChecked[to] = 1
           end
@@ -69,37 +54,42 @@ end
 
 
 """
-Take a contact network, different diseases (defined by
+Take a contact network, different diseases (defined by 
 different parameters alpha and beta), a number of initial
-infected people and process nbsimu simulations of SIS over
-t time steps. You will provide the prediction of the
-percentage of infected at each time t as well as the
+infected people and process nbsimu simulations of SIR over
+t time steps. You will provide the prediction of the 
+percentage of infected at each time t as well as the 
 spreading rate of each disease.
 
-**PARAMS** :
+**PARAMS**
   - net `LightGraph` : *graph representing the contact network*
-  - nbinf `Int32` : *number of infected at the start of each*
-        simulation
+  - nbinf `Int32` : *number of infected at the start of each 
+      simulation*
   - betas `Array{Float64,1}` : *array of infection rate on edges*
   - alphas `Array{Float64,1}` : *array of curing rate on vertices*
   - t `Int32` : *number of time steps*
   - nbsimu `Int32` : *number of simulations*
 
-**RETURNS** :
-  - `Array{Float64,2}` : *the prediction of the percentage of 
-        infected at each time step and for each disease. The 
-        first dimension contains the time steps and the second
-        contains the diseases*
+RETURNS
+  - `Array{Float64,3}` : *the prediction of the percentage of 
+      infected, the percentage of susceptible and the 
+      percentage of recovered at each time step and for each 
+      disease. The first dimension contains the time steps,
+      the second contains the diseases, and the third one of the
+      following statuses:
+      - Infected : `[:, :, 1]`
+      - Recovered : `[:, :, 2]`
+      - Susceptible : `[:, :, 3]`
   - `Array{Float64,1}` : *effective spreading rate for each 
-        disease*
+      disease*
 
 """
-function Simulation_SIS(net,nbinf,betas,alphas,t,nbsimu)
+function Simulation_SIR(net,nbinf,betas,alphas,t,nbsimu)
   # initialize lock
   lk = Threads.SpinLock()
 
   nbdis = size(alphas)[1]
-  avg_infected_percentage = zeros(t, nbdis)
+  avg_infected_percentage = zeros(t, nbdis, 3)
   effective_spreading_rate = zeros(nbdis)
 
   Threads.@threads for i in 1:nbdis
@@ -111,12 +101,23 @@ function Simulation_SIS(net,nbinf,betas,alphas,t,nbsimu)
       state = init_State(nv(net), nbinf)
       for step in 1:t
         # Simulate the disease
-        state = SIS(net, state, beta, alpha, step)
+        state = SIR(net, state, beta, alpha, step)
 
         lock(lk)
         try
           # Compute the percentage of infected
-          avg_infected_percentage[step, i] += sum(state) / nv(net)
+          for s in state
+            if s == 1
+              avg_infected_percentage[step, i, 1] += 1
+            elseif s == 2
+              avg_infected_percentage[step, i, 2] += 1
+            elseif s == 3
+              avg_infected_percentage[step, i, 3] += 1
+            end
+          end
+          avg_infected_percentage[step, i, 1] /= nv(net)
+          avg_infected_percentage[step, i, 2] /= nv(net)
+          avg_infected_percentage[step, i, 3] /= nv(net)
         finally
           unlock(lk)
         end
@@ -124,16 +125,4 @@ function Simulation_SIS(net,nbinf,betas,alphas,t,nbsimu)
     end
   end
   return avg_infected_percentage / nbsimu , effective_spreading_rate
-end
-
-if abspath(PROGRAM_FILE) == @__FILE__
-  # just a small test
-  karat7 = smallgraph(:karate)
-
-  betas=[0.05,0.1,0.01,0.4,0.04,0.05,0.005]
-  alphas=[0.05,0.1,0.01,0.1,0.01,0.1,0.01]
-
-  predictions, taus = Simulation_SIS(karat7,2,betas,alphas,10,7)
-
-  Plots.plot(predictions, label=taus',xlabel="Time",ylabel="Avg % of infected")
 end

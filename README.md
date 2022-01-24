@@ -18,6 +18,6 @@ You should now be able to open the notebook in jupyter, and run the cells indivi
 
 ## Examples
 
-![](src/out/karat7.png)
-![](src/out/n7_2A.png)
 ![](src/out/toulouse_neigh.png)
+![](src/out/n7_2A.png)
+![](src/out/karat7.png)

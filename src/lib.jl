@@ -30,17 +30,27 @@ Draw the contact network and the state of its vertices.
   - net `LightGraph` : *graph representing the contact network*
   - state `Array{Int32,1}` : *disease status of each vertex*
   - filename `String` : *name of the file to save the image*
+  - susceptibleColor `String` : *color of the susceptible vertices (optional)*
   - infectedColor `String` : *color of the infected vertices (optional)*
+  - recoveredColor `String` : *color of the recovered vertices (optional)*
   - cleanColor `String` : *color of the clean vertices (optional)*
   
 """
-function draw_Net_Graph(net, state, filename, infectedColor = colorant"orange", susceptibleColor = colorant"lightseagreen", curedColor = colorant"lightgreen", alertColor = colorant"purple")
+function draw_Net_Graph(
+    net, 
+    state, 
+    filename, 
+    susceptibleColor = colorant"lightseagreen", 
+    infectedColor = colorant"orange", 
+    recoveredColor = colorant"lightgreen", 
+    alertColor = colorant"purple"
+  )
   nodecolor = [susceptibleColor for i in 0:nv(net)]
   for i in 1:nv(net)
     if state[i] == 1
       nodecolor[i] = infectedColor
     elseif state[i] == 2
-      nodecolor[i] = curedColor
+      nodecolor[i] = recoveredColor
     elseif state[i] == 3
       nodecolor[i] = alertColor
     end
