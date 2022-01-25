@@ -24,49 +24,56 @@ of a SIS model.
 
 **RETURNS** :
   - state `Array{Int32,1}` : *The new state of the contact network after t time steps.*
-  
+  - infection_percentage `Array{Float64,1}` : *The average percentage of infected nodes at each time step.*
 """
-function SIS(net,state,beta,alpha,t) 
+function Core_SIS(net,state,beta,alpha,t)
   
-  # This array will let us know if we have already checked if the node should
-  # cured at this step or not.
-  hasCellBeenChecked = [0 for i in 0:nv(net)]
+  # This array will contain the average infection percentage through each time
+  # step.
+  infection_percentage = zeros(t)
 
-  # Initialize the new state
-  outputstate = state
   for i in 1:t
-      for j in LightGraphs.edges(net)
-          from = j.src
-          to = j.dst
-          # check if the nodes can infect each other
-          if state[from] == 1 && state[to] == 0
-              if rand() < beta
-                  outputstate[to] = 1
-              end
-          elseif state[to] == 1 && state[from] == 0
-              if rand() < beta
-                  outputstate[from] = 1
-              end
+    infected_cells = LightGraphs.findall(==(1), state)
+    for cell in infected_cells
+      neighbors = LightGraphs.neighbors(net, cell)
+      for neighbor in neighbors
+        # infect neighbors
+        if state[neighbor] == 0
+          if rand() < beta
+            state[neighbor] = 1
           end
+        end
 
-          # check both cells can cure themselves, if they have not been checked yet
-          if state[from] == 1 && hasCellBeenChecked[from] == 0
-              if rand() < alpha
-                  outputstate[from] = 0
-              end
-              hasCellBeenChecked[from] = 1
-          elseif state[to] == 1 && hasCellBeenChecked[to] == 0
-              if rand() < alpha
-                  outputstate[to] = 0
-              end
-              hasCellBeenChecked[to] = 1
-          end
+        # cure itself
+        if rand() < alpha
+          state[cell] = 0
+        end
       end
+    end
+    infection_percentage[i] = sum(state)/nv(net)
   end
 
-  return outputstate
+  return state, infection_percentage
 end
 
+"""
+Take a contact network at a certain state and apply t time steps
+of a SIS model.
+
+**PARAMS** :
+  - net `LightGraph` : *graph representing the contact network*
+  - state `Array{Int32,1}` : *disease status of each vertex*
+  - beta `Float64` : *infection rate*
+  - alpha `Float64` : *curing rate*
+  - t `Int32` : *number of time step*
+
+**RETURNS** :
+  - state `Array{Int32,1}` : *The new state of the contact network after t time steps.*
+  
+"""
+function SIS(net, state, beta, alpha, t)
+  return Core_SIS(net, state, beta, alpha, t)[1]
+end
 
 """
 Take a contact network, different diseases (defined by
@@ -99,7 +106,7 @@ function Simulation_SIS(net,nbinf,betas,alphas,t,nbsimu)
   lk = Threads.SpinLock()
 
   nbdis = size(alphas)[1] 
-  avg_infected_percentage = zeros(t, nbdis)
+  avg_infection_percentage = zeros(t, nbdis)
   effective_spreading_rate = zeros(nbdis)
 
   Threads.@threads for i in 1:nbdis
@@ -109,21 +116,19 @@ function Simulation_SIS(net,nbinf,betas,alphas,t,nbsimu)
     for j in 1:nbsimu
       # Initialize the state
       state = init_State(nv(net), nbinf)
-      for step in 1:t
-        # Simulate the disease
-        state = SIS(net, state, beta, alpha, step)
+      # Simulate the disease
+      state, infection_percentage = Core_SIS(net, state, beta, alpha, t)
 
-        lock(lk)
-        try
-          # Compute the percentage of infected
-          avg_infected_percentage[step, i] += sum(state) / nv(net)
-        finally
-          unlock(lk)
-        end
+      lock(lk)
+      try
+        # Compute the percentage of infected
+        avg_infection_percentage[: , i] += infection_percentage
+      finally
+        unlock(lk)
       end
     end
   end
-  return avg_infected_percentage / nbsimu , effective_spreading_rate
+  return avg_infection_percentage / nbsimu , effective_spreading_rate
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__

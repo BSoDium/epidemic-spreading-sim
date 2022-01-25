@@ -10,46 +10,58 @@ Take a contact network at a certain state and apply t time steps
     - t `Int32`: *number of time step*
   
   RETURNS
+    - outputstate `Array{Int32,1}`: *The new state of the contact network after t time steps.*
+    - infection_percentage `Array{Float64,1}` : *The average percentage of infected nodes at each time step.*
+  """
+function Core_SIR(net,state,beta,alpha,t)
+
+  stats = zeros(t,3);
+
+  for i in 1:t
+    infected_cells = LightGraphs.findall(==(1), state)
+    for cell in infected_cells
+      neighbors = LightGraphs.neighbors(net, cell)
+      for neighbor in neighbors
+        # infect neighbors
+        if state[neighbor] == 0
+          if rand() < beta
+            state[neighbor] = 1
+          end
+        end
+
+        # cure itself
+        if rand() < alpha
+          state[cell] = 2
+        end
+      end
+    end
+    step_stats = [
+      LightGraphs.count(==(1), state),
+      LightGraphs.count(==(2), state),
+      LightGraphs.count(==(0), state)
+    ]
+    stats[i, :] = step_stats
+  end
+
+  return state, stats
+end
+
+"""
+Take a contact network at a certain state and apply t time steps
+  of an SIR model.
+  
+  PARAMS
+    - net `LightGraph`: *graph representing the contact network*
+    - state `Array{Int32,1}`: *disease status of each vertex*
+    - beta `Float64`: *infection rate*
+    - alpha `Float64`: *curing rate*
+    - t `Int32`: *number of time step*
+  
+  RETURNS
       - `Array{Int32,1}`: *The new state of the contact network after t time steps.*
   """
 function SIR(net,state,beta,alpha,t)
-  # This array will let us know if we have already checked if the node should
-  # cured at this step or not.
-  hasCellBeenChecked = [0 for i in 0:nv(net)]
-
-  # Initialize the new state
-  outputstate = state
-  for i in 1:t
-      for j in LightGraphs.edges(net)
-          from = j.src
-          to = j.dst
-          # check if the nodes can infect each other
-          if state[from] == 1 && state[to] == 0
-              if rand() < beta
-                  outputstate[to] = 1
-              end
-          elseif state[to] == 1 && state[from] == 0
-              if rand() < beta
-                  outputstate[from] = 1
-              end
-          end
-
-          # check both cells can cure themselves, if they have not been checked yet
-          if state[from] == 1 && hasCellBeenChecked[from] == 0
-              if rand() < alpha
-                  outputstate[from] = 2
-              end
-              hasCellBeenChecked[from] = 1
-          elseif state[to] == 1 && hasCellBeenChecked[to] == 0
-              if rand() < alpha
-                  outputstate[to] = 2
-              end
-              hasCellBeenChecked[to] = 1
-          end
-      end
-  end
-
-  return outputstate
+  return Core_SIR(net,state,beta,alpha,t)[1]
 end
 
 
@@ -89,40 +101,26 @@ function Simulation_SIR(net,nbinf,betas,alphas,t,nbsimu)
   lk = Threads.SpinLock()
 
   nbdis = size(alphas)[1]
-  avg_infected_percentage = zeros(t, nbdis, 3)
+  avg_infection_stats = zeros(t, nbdis, 3)
   effective_spreading_rate = zeros(nbdis)
 
-  Threads.@threads for i in 1:nbdis
+  for i in 1:nbdis
     alpha = alphas[i]
     beta = betas[i]
     effective_spreading_rate[i] = beta / alpha
     for j in 1:nbsimu
       # Initialize the state
       state = init_State(nv(net), nbinf)
-      for step in 1:t
         # Simulate the disease
-        state = SIR(net, state, beta, alpha, step)
+        state, stats = Core_SIR(net, state, beta, alpha, t)
 
         lock(lk)
         try
-          # Compute the percentage of infected
-          for s in state
-            if s == 1
-              avg_infected_percentage[step, i, 1] += 1
-            elseif s == 2
-              avg_infected_percentage[step, i, 2] += 1
-            elseif s == 0
-              avg_infected_percentage[step, i, 3] += 1
-            end
-          end
-          avg_infected_percentage[step, i, 1] /= nv(net)
-          avg_infected_percentage[step, i, 2] /= nv(net)
-          avg_infected_percentage[step, i, 3] /= nv(net)
+          avg_infection_stats[:, i, 1] += stats[:, 1]
         finally
           unlock(lk)
         end
       end
     end
-  end
-  return avg_infected_percentage / nbsimu , effective_spreading_rate
+  return avg_infection_stats / nbsimu , effective_spreading_rate
 end
