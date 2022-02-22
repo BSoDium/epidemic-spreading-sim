@@ -37,7 +37,7 @@ Draw the contact network and the state of its vertices.
   
 """
 function draw_Net_Graph(
-    net, 
+    net,
     state, 
     filename, 
     susceptibleColor = colorant"lightseagreen", 
